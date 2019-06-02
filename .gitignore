@@ -1,2 +1,6 @@
 *.pyc
 __pycache__
+env/
+.idea/
+structure/crop/input_pdfs
+structure/crop/output_pdfs
