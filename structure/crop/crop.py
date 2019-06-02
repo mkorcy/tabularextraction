@@ -1,33 +1,96 @@
 
 import cv2
-import sys
 import os
+import glob
+import shutil
 import numpy as np
-
+import ntpath
+import pytesseract
+import re
+from alyn import deskew
+from fpdf import FPDF
+from PIL import Image
 from pdf2image import convert_from_path
-from matplotlib import pyplot as plt
-
-from pdfminer.pdfdocument import PDFDocument
-from pdfminer.pdfpage import PDFPage
-from pdfminer.pdfparser import PDFParser
-from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
-from pdfminer.converter import PDFPageAggregator
-from pdfminer.layout import LAParams, LTTextBox, LTTextLine, LTFigure
-
-from PyPDF2 import PdfFileWriter,PdfFileReader,PdfFileMerger
 
 
 
-PDF = str(41)
+def convert_pdf_to_images_and_crop(pdf_path, output_path):
+    pdf_name = ntpath.basename(pdf_path) 
+    pages = convert_from_path(pdf_path, dpi=300)
+   
+    for page in pages:    
+        image_name = "%s-page-%d.jpg" % (pdf_name, pages.index(page))
+        jpeg_path = os.path.join(output_path, image_name)
+        deskew_path = os.path.join('deskewed_images', image_name)
+        page.save(jpeg_path, "PNG")
+        
+        # Trying to detect rotated images before doing deskew
+        erode_image(jpeg_path)
+        # Get information about orientation and script detection
+        osd_data = pytesseract.image_to_osd(Image.open(os.path.join('erode_images',image_name)))
+        
+        # if the rotation of the document looks completely off, rotate as deskewing it won't help if its
+        # off by a very large # of degrees 90,180, etc.
+        rotation = re.search('(?<=Rotate: )\d+', osd_data).group(0)
+        confidence = re.search('(?<=Orientation confidence: )\d+', osd_data).group(0)
+        rotation = int(rotation)
+        confidence = int(confidence)
+        
+        if rotation > 0 and confidence > 5:        
+            image_to_rotate  = Image.open(jpeg_path)
+            image_to_rotate = image_to_rotate.rotate(360-rotation)
+            image_to_rotate.save(jpeg_path,"PNG")
+        
+        # https://github.com/mawanda-jun/Alyn
+        # Python3 compatible fork of alyn
+        d = deskew.Deskew(
+            input_file=jpeg_path,            
+            output_file=deskew_path,
+            r_angle=0)
+        d.run()
 
-
-def to_image(pdf_path, pdf_name, number_of_pages, output_path):
-
-    pages = convert_from_path(pdf_path + pdf_name + '.PDF', 100, last_page=number_of_pages)
+        
+        # Crop the images down via the horizontal line
+        first_crop('deskewed_images', "%s-page-%d.jpg" % (pdf_name, pages.index(page)), output_dir="first_crop_images")
+        second_crop('first_crop_images', "%s-page-%d.jpg" % (pdf_name, pages.index(page)), output_dir="second_crop_images")
+    
+    # once we have stacks of images that have been cropped
+    # restack them back into a single PDF for easier processing
 
     for page in pages:
-        page.save(os.path.join(output_path, "%s-page-%d.jpg" % (pdf_name, pages.index(page))), "JPEG")
+        # Covert the cropped images back to pdf form
+        second_crop_page = os.path.join("second_crop_images", "%s-page-%d.jpg" % (pdf_name, pages.index(page)))        
 
+def erode_image(jpeg_path):
+    image_name = ntpath.basename(jpeg_path) 
+    image = cv2.imread(jpeg_path)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blur = cv2.blur(gray,(3,3))
+    _,thresh = cv2.threshold(blur,240,255,cv2.THRESH_BINARY)
+    #cv2.imshow("thresh",thresh)
+    thresh = cv2.bitwise_not(thresh)
+    element = cv2.getStructuringElement(shape=cv2.MORPH_RECT, ksize=(5, 5))
+    erode = cv2.erode(thresh,element,3)
+    
+    cv2.imwrite(os.path.join('erode_images',image_name), erode)
+#
+#   Create a PDF from a stack of images
+#
+
+def make_pdf(pdfFileName, listPages, dir = ''):
+    if (dir):
+        dir += "/"
+     
+    cover = Image.open(listPages[0])
+    width, height = cover.size
+
+    pdf = FPDF(unit = "pt", format = [width, height+150])
+
+    for page in listPages:
+        pdf.add_page()
+        pdf.image(page, 0, 150)
+
+    pdf.output(dir + pdfFileName, "F")
 
 #
 #   Crop the specified image to the first horizontal line.
@@ -55,9 +118,8 @@ def first_crop(input_dir, image_name, output_dir):
 
         cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255),2)
         crop_img = img[y1+6:height, 0:width]
-
-        print(os.path.join(input_dir, image_name))
-        cv2.imwrite(str(os.path.join(output_dir, 'crop-1-' + image_name)), crop_img)
+        
+        cv2.imwrite(str(os.path.join(output_dir, image_name)), crop_img)
 
     # To Show Matplot graph with drawn line, uncomment
 
@@ -96,90 +158,48 @@ def second_crop(input_dir, image_name, output_dir):
 
 
         crop_img = img[y1 + 6:height, 0:width]
-        path = str(os.path.join(output_dir, 'crop-2-' + image_name.replace("crop-1-", "")))
+        path = str(os.path.join(output_dir, image_name))
 
         cv2.imwrite(path, crop_img)
 
+# find files regardless of case to deal with *.PDF file endings when I would
+# normally expect *.pdf
+def insensitive_glob(pattern):
+        def either(c):
+            return '[%s%s]' % (c.lower(), c.upper()) if c.isalpha() else c
+        return glob.glob(''.join(map(either, pattern)))
 
-def parse_layout(layout):
+def prep_directories():
+    dirname = os.path.dirname(__file__)
+    output_dirs = ['input_pdfs', 'output_images','deskewed_images','erode_images','output_pdfs','first_crop_images','second_crop_images']
+    for dir in output_dirs:
+        os.makedirs( os.path.join(dirname, dir), exist_ok=True);
 
-    """Function to recursively parse the layout tree."""
-    for lt_obj in layout:
-        print(lt_obj.__class__.__name__)
-        print(lt_obj.bbox)
-        if isinstance(lt_obj, LTTextBox) or isinstance(lt_obj, LTTextLine):
-            print(lt_obj.get_text())
-        elif isinstance(lt_obj, LTFigure):
-            parse_layout(lt_obj)  # Recurs
-
-
-
-#
-#   Parse the pdf into an xml structure
-#
-
-def parse_pdf(pdf_path):
-
-    fp = open(pdf_path, 'rb')
-
-    parser = PDFParser(fp)
-    doc = PDFDocument(parser)
-
-    rsrcmgr = PDFResourceManager()
-    laparams = LAParams()
-    device = PDFPageAggregator(rsrcmgr, laparams=laparams)
-    interpreter = PDFPageInterpreter(rsrcmgr, device)
-
-    for page in PDFPage.create_pages(doc):
-        interpreter.process_page(page)
-        layout = device.get_result()
-        parse_layout(layout)
-
-
-
-def page_to_pdf(image_path, pdf_path, page_number):
-
-    img = cv2.imread(image_path, 0)
-    height, width = img.shape[:2]
-
-    print(height)
-    print(width)
-
-    pdf_file = PdfFileReader(open(pdf_path, "rb"))
-    page = pdf_file.getPage(page_number)
-
-    print(page.cropBox.getLowerLeft())
-    print(page.cropBox.getLowerRight())
-    print(page.cropBox.getUpperLeft())
-    print(page.cropBox.getUpperRight())
-
-    page.mediaBox.lowerLeft = (0, 0)
-    page.mediaBox.lowerRight = (width, 0)
-
-    page.mediaBox.upperLeft = (0, height - 175)
-    page.mediaBox.upperRight = (width, height - 175)
-
-    writer = PdfFileWriter()
-    outfp = open(pdf_path + '-cropped-page-' + str(page_number) + ".pdf", 'wb')
-
-    writer.addPage(page)
-    writer.write(outfp)
-
-
-
+def breakdown_scratch_files():
+    dirname = os.path.dirname(__file__)
+    dirs_to_clean = ['output_images','deskewed_images','erode_images','first_crop_images','second_crop_images']
+    for dir in dirs_to_clean:
+        shutil.rmtree(os.path.join(dirname, dir), ignore_errors=True, onerror=None)
+    
+def process_pdfs():
+    input_pdfs = insensitive_glob('./input_pdfs/*.pdf')
+    for input_pdf in input_pdfs:
+        # Input Directory, Name of Pdf, Page to Convert, Place to Save Image
+        convert_pdf_to_images_and_crop(input_pdf, output_path='output_images/')                  
+        pdf_name = ntpath.basename(input_pdf)
+        input_images = insensitive_glob('./second_crop_images/*.jpg')
+        input_images.sort()
+        print(input_images)
+        make_pdf(pdf_name, input_images, dir = 'output_pdfs/')
 #
 #   Example conversion of particular pdf page to cropped image and
 #   then "cropped pdf" equivalent.
 #
 
 if __name__ == '__main__':
+    # get the working directory so we can create folders
+    prep_directories()
 
-    # Input Directory, Name of Pdf, Page to Convert, Place to Save Image
-    to_image('input_pdfs/', str(41), 1, output_path='output_images/')
-
-    # Crop the images down via the horizontal line
-    first_crop('output_images', '41-page-0.jpg', output_dir="output_images")
-    second_crop('output_images', 'crop-1-41-page-0.jpg', output_dir="output_images")
-
-    # Covert the cropped image back to pdf form
-    page_to_pdf("output_images/crop-2-41-page-0.jpg", "input_pdfs/41.PDF", 1)
+    process_pdfs()
+    
+    breakdown_scratch_files()
