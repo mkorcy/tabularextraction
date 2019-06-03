@@ -4,3 +4,6 @@ env/
 .idea/
 structure/crop/input_pdfs
 structure/crop/output_pdfs
+structure/crop/output_images
+structure/crop/erode_images
+

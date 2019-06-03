@@ -104,30 +104,33 @@ def first_crop(input_dir, image_name, output_dir):
     edges = cv2.Canny(img, 100, 200)
 
     lines = cv2.HoughLines(edges, 1, np.pi/90, 400)
+    if lines is None:
+        print("Didn't find line to crop on (first crop)")
+        cv2.imwrite(str(os.path.join(output_dir, image_name)), img)
+    else:
+        for rho,theta in lines[0]:
 
-    for rho,theta in lines[0]:
+            a = np.cos(theta)
+            b = np.sin(theta)
+            x0 = a*rho
+            y0 = b*rho
+            x1 = int(x0 + 1000*(-b))
+            y1 = int(y0 + 1000*(a))
+            x2 = int(x0 - 1000*(-b))
+            y2 = int(y0 - 1000*(a))
 
-        a = np.cos(theta)
-        b = np.sin(theta)
-        x0 = a*rho
-        y0 = b*rho
-        x1 = int(x0 + 1000*(-b))
-        y1 = int(y0 + 1000*(a))
-        x2 = int(x0 - 1000*(-b))
-        y2 = int(y0 - 1000*(a))
-
-        cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255),2)
-        crop_img = img[y1+6:height, 0:width]
+            cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255),2)
+            crop_img = img[y1+6:height, 0:width]
         
-        cv2.imwrite(str(os.path.join(output_dir, image_name)), crop_img)
+            cv2.imwrite(str(os.path.join(output_dir, image_name)), crop_img)
 
-    # To Show Matplot graph with drawn line, uncomment
+        # To Show Matplot graph with drawn line, uncomment
 
-    # plt.subplot(121),plt.imshow(img, cmap = 'gray')
-    # plt.title('Original Image'), plt.xticks([]), plt.yticks([])
-    # plt.plot(122),plt.imshow(edges,cmap = 'gray')
-    # plt.title('Edge Image'), plt.xticks([]), plt.yticks([])
-    # plt.show()
+        # plt.subplot(121),plt.imshow(img, cmap = 'gray')
+        # plt.title('Original Image'), plt.xticks([]), plt.yticks([])
+        # plt.plot(122),plt.imshow(edges,cmap = 'gray')
+        # plt.title('Edge Image'), plt.xticks([]), plt.yticks([])
+        # plt.show()
 
 
 #
@@ -143,24 +146,27 @@ def second_crop(input_dir, image_name, output_dir):
     edges = cv2.Canny(img, 100, 200)
 
     lines = cv2.HoughLines(edges, 1, np.pi / 90, 100)
+    if lines is None:
+        print("Didn't find line to crop on (second crop)")
+        cv2.imwrite(str(os.path.join(output_dir, image_name)), img)
+    else:
+        for rho, theta in lines[0]:
+            a = np.cos(theta)
+            b = np.sin(theta)
+            x0 = a * rho
+            y0 = b * rho
+            x1 = int(x0 + 1000 * (-b))
+            y1 = int(y0 + 1000 * (a))
+            x2 = int(x0 - 1000 * (-b))
+            y2 = int(y0 - 1000 * (a))
 
-    for rho, theta in lines[0]:
-        a = np.cos(theta)
-        b = np.sin(theta)
-        x0 = a * rho
-        y0 = b * rho
-        x1 = int(x0 + 1000 * (-b))
-        y1 = int(y0 + 1000 * (a))
-        x2 = int(x0 - 1000 * (-b))
-        y2 = int(y0 - 1000 * (a))
-
-        cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 2)
 
 
-        crop_img = img[y1 + 6:height, 0:width]
-        path = str(os.path.join(output_dir, image_name))
+            crop_img = img[y1 + 6:height, 0:width]
+            path = str(os.path.join(output_dir, image_name))
 
-        cv2.imwrite(path, crop_img)
+            cv2.imwrite(path, crop_img)
 
 # find files regardless of case to deal with *.PDF file endings when I would
 # normally expect *.pdf
