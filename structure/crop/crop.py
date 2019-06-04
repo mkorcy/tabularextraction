@@ -1,4 +1,4 @@
-
+import logging
 import cv2
 import os
 import glob
@@ -12,6 +12,20 @@ from fpdf import FPDF
 from PIL import Image
 from pdf2image import convert_from_path
 
+# create global logger with 'crop_errors'
+logger = logging.getLogger('crop_errors')
+logger.setLevel(logging.DEBUG)
+
+# create file handler which logs even debug messages
+fh = logging.FileHandler('crop_errors.log')
+fh.setLevel(logging.DEBUG)
+
+# create formatter and add it to the handlers
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+
+# add the handlers to the logger
+logger.addHandler(fh)
 
 
 def convert_pdf_to_images_and_crop(pdf_path, output_path):
@@ -51,8 +65,8 @@ def convert_pdf_to_images_and_crop(pdf_path, output_path):
 
         
         # Crop the images down via the horizontal line
-        first_crop('deskewed_images', "%s-page-%d.jpg" % (pdf_name, pages.index(page)), output_dir="first_crop_images")
-        second_crop('first_crop_images', "%s-page-%d.jpg" % (pdf_name, pages.index(page)), output_dir="second_crop_images")
+        first_crop('deskewed_images', "%s-page-%d.jpg" % (pdf_name, pages.index(page)), output_dir="first_crop_images", pdf_name=pdf_name, page_number=pages.index(page))
+        second_crop('first_crop_images', "%s-page-%d.jpg" % (pdf_name, pages.index(page)), output_dir="second_crop_images", pdf_name=pdf_name, page_number=pages.index(page))
     
     # once we have stacks of images that have been cropped
     # restack them back into a single PDF for easier processing
@@ -96,7 +110,7 @@ def make_pdf(pdfFileName, listPages, dir = ''):
 #   Crop the specified image to the first horizontal line.
 #
 
-def first_crop(input_dir, image_name, output_dir):
+def first_crop(input_dir, image_name, output_dir, pdf_name, page_number):
 
     img = cv2.imread(os.path.join(input_dir, image_name), 0)
     height, width = img.shape[:2]
@@ -105,9 +119,9 @@ def first_crop(input_dir, image_name, output_dir):
 
     lines = cv2.HoughLines(edges, 1, np.pi/90, 400)
     if lines is None:
-        print("Didn't find line to crop on (first crop)")
+        logger.error("First Crop failed PDF: %s Page: %s" %(pdf_name, page_number,))
         cv2.imwrite(str(os.path.join(output_dir, image_name)), img)
-    else:
+    else:        
         for rho,theta in lines[0]:
 
             a = np.cos(theta)
@@ -138,7 +152,7 @@ def first_crop(input_dir, image_name, output_dir):
 #   (After first Crop has been called)
 #
 
-def second_crop(input_dir, image_name, output_dir):
+def second_crop(input_dir, image_name, output_dir, pdf_name, page_number):
 
     img = cv2.imread(os.path.join(input_dir, image_name), 0)
     height, width = img.shape[:2]
@@ -147,7 +161,7 @@ def second_crop(input_dir, image_name, output_dir):
 
     lines = cv2.HoughLines(edges, 1, np.pi / 90, 100)
     if lines is None:
-        print("Didn't find line to crop on (second crop)")
+        logger.error("Second Crop failed PDF: %s Page: %s" %(pdf_name, page_number,))
         cv2.imwrite(str(os.path.join(output_dir, image_name)), img)
     else:
         for rho, theta in lines[0]:
