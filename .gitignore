@@ -6,4 +6,8 @@ structure/crop/input_pdfs
 structure/crop/output_pdfs
 structure/crop/output_images
 structure/crop/erode_images
-
+structure/crop/crop_errors.log
+structure/crop/deskewed_images/
+structure/crop/first_crop_images/
+structure/crop/margin_trimmed_images/
+structure/crop/second_crop_images/

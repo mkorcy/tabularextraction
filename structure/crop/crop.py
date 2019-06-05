@@ -63,9 +63,10 @@ def convert_pdf_to_images_and_crop(pdf_path, output_path):
             r_angle=0)
         d.run()
 
-        
+        #
+        remove_margins('deskewed_images', "%s-page-%d.jpg" % (pdf_name, pages.index(page)), output_dir="margin_trimmed_images", pdf_name=pdf_name, page_number=pages.index(page))
         # Crop the images down via the horizontal line
-        first_crop('deskewed_images', "%s-page-%d.jpg" % (pdf_name, pages.index(page)), output_dir="first_crop_images", pdf_name=pdf_name, page_number=pages.index(page))
+        first_crop('margin_trimmed_images', "%s-page-%d.jpg" % (pdf_name, pages.index(page)), output_dir="first_crop_images", pdf_name=pdf_name, page_number=pages.index(page))
         second_crop('first_crop_images', "%s-page-%d.jpg" % (pdf_name, pages.index(page)), output_dir="second_crop_images", pdf_name=pdf_name, page_number=pages.index(page))
     
     # once we have stacks of images that have been cropped
@@ -94,17 +95,23 @@ def erode_image(jpeg_path):
 def make_pdf(pdfFileName, listPages, dir = ''):
     if (dir):
         dir += "/"
-     
-    cover = Image.open(listPages[0])
-    width, height = cover.size
+    
 
-    pdf = FPDF(unit = "pt", format = [width, height+150])
+    pdf = FPDF(unit = "pt", format = [1114, 793])
 
     for page in listPages:
         pdf.add_page()
-        pdf.image(page, 0, 150)
+        pdf.image(page, 0, 72, 1114,0)
 
     pdf.output(dir + pdfFileName, "F")
+
+def remove_margins(input_dir, image_name, output_dir, pdf_name, page_number):
+    img = cv2.imread(os.path.join(input_dir, image_name), 0)
+    height, width = img.shape[:2]
+
+    crop_img = img[0:height, 125:width-125]
+        
+    cv2.imwrite(str(os.path.join(output_dir, image_name)), crop_img)
 
 #
 #   Crop the specified image to the first horizontal line.
@@ -191,13 +198,13 @@ def insensitive_glob(pattern):
 
 def prep_directories():
     dirname = os.path.dirname(__file__)
-    output_dirs = ['input_pdfs', 'output_images','deskewed_images','erode_images','output_pdfs','first_crop_images','second_crop_images']
+    output_dirs = ['input_pdfs', 'output_images','deskewed_images','erode_images','output_pdfs','first_crop_images','second_crop_images', 'margin_trimmed_images']
     for dir in output_dirs:
         os.makedirs( os.path.join(dirname, dir), exist_ok=True);
 
 def breakdown_scratch_files():
     dirname = os.path.dirname(__file__)
-    dirs_to_clean = ['output_images','deskewed_images','erode_images','first_crop_images','second_crop_images']
+    dirs_to_clean = ['output_images','deskewed_images','erode_images','first_crop_images','second_crop_images', 'margin_trimmed_images']
     for dir in dirs_to_clean:
         shutil.rmtree(os.path.join(dirname, dir), ignore_errors=True, onerror=None)
     
@@ -222,4 +229,4 @@ if __name__ == '__main__':
 
     process_pdfs()
     
-    breakdown_scratch_files()
+    #breakdown_scratch_files()
