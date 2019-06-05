@@ -110,7 +110,7 @@ def remove_margins(input_dir, image_name, output_dir, pdf_name, page_number):
     height, width = img.shape[:2]
 
     crop_img = img[0:height, 125:width-125]
-    crop_img = img[0:height, 0:width]
+    #crop_img = img[0:height, 0:width]
         
     cv2.imwrite(str(os.path.join(output_dir, image_name)), crop_img)
 
